@@ -1,0 +1,129 @@
+二：獲取源代碼
+
+從網址http://www.ti.com/tool/androidsdk-sitara 下載Android Jelly Bean 4.2.2 - Dev Kit for AM335x
+
+可以用git下載源碼也可以直接下載源碼包，此處是直接下載的源碼包。下面是該源碼包的連接地址，包含了各種文檔。
+
+http://downloads.ti.com/sitara_android/esd/TI_Android_DevKit/TI_Android_JB_4_2_2_DevKit_4_1_1/index_FDS.html
+
+
+
+系統安裝完成後，按照guide做如下設置：
+
+1. 安裝必須的包
+
+$ sudo apt-get install git-core gnupg flex bison gperf build-essential \
+  zip curl libc6-dev libncurses5-dev:i386 x11proto-core-dev \
+  libx11-dev:i386 libreadline6-dev:i386 libgl1-mesa-glx:i386 \
+  libgl1-mesa-dev g++-multilib mingw32 openjdk-6-jdk tofrodos \
+  python-markdown libxml2-utils xsltproc zlib1g-dev:i386 \
+  minicom tftpd uboot-mkimage expect libgl1-mesa-dri libglapi-mesa:i386
+$ sudo ln -s /usr/lib/i386-linux-gnu/mesa/libGL.so.1 /usr/lib/i386-linux-gnu/libGL.so
+
+注意：官網上少了libglapi-mesa:i386，不添加上會安裝失敗。
+
+2. 安裝JDK6
+
+$ chmod a+x jdk-6u45-linux-x64.bin
+$ ./jdk-6u45-linux-x64.bin
+$ sudo mkdir -p /usr/lib/jvm
+$ sudo mv jdk1.6.0_45 /usr/lib/jvm/
+$ sudo update-alternatives --install "/usr/bin/java" "java" "/usr/lib/jvm/jdk1.6.0_45/bin/java" 1
+$ sudo update-alternatives --install "/usr/bin/javac" "javac" "/usr/lib/jvm/jdk1.6.0_45/bin/javac" 1
+$ sudo update-alternatives --config java
+$ sudo update-alternatives --config javac
+$ sudo java -version
+
+注意：必須下載JDK安裝，Ubuntu自帶的open jdk不行。
+
+四：編譯源碼
+
+1. 源碼下載回來為.bin格式的，需要安裝源碼包
+
+$ chmod a+x TI_Android_JB_4.2.2_DevKit_4.1.1.bin
+$ ./TI_Android_JB_4.2.2_DevKit_4.1.1.bin
+
+2. 設置toolchain
+
+添加下面的內容到.bashrc
+
+exportPATH=~/BeagleBoneBlack/source/TI_Android_JB_4.2.2_DevKit_4.1.1/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6/bin:$PATH
+
+3. 編譯bootload
+
+make CROSS_COMPILE=arm-eabi- distclean
+make CROSS_COMPILE=arm-eabi- am335x_evm_config
+make CROSS_COMPILE=arm-eabi- 
+===== OR =====
+make TARGET_PRODUCT=beagleboneblack OMAPES=4.x u-boot_build
+
+4. 編譯kernel
+
+內核的默認配置文件是：arch/arm/configs/am335x_evm_android_defconfig
+make ARCH=arm CROSS_COMPILE=arm-eabi- distclean
+make ARCH=arm CROSS_COMPILE=arm-eabi- am335x_evm_android_defconfig
+make ARCH=arm CROSS_COMPILE=arm-eabi- uImage
+===== OR =====
+make TARGET_PRODUCT=beagleboneblack OMAPES=4.x kernel_build
+
+5. 編譯Android
+make TARGET_PRODUCT=beagleboneblack OMAPES=4.x -j4
+
+注意：-j4 是指定編譯的線程數，4是由CPU的個數（CPU核數） X 2 得來的。
+
+如果是在虛擬機中最好不要使用該參數，容易出錯。（也可能是我的機器性能太差了）
+
+6. 創建rootfs
+
+make TARGET_PRODUCT=beagleboneblack fs_tarball
+===== OR =====
+$ cd out/target/product/beagleboneblack
+$ mkdir android_rootfs
+$ cp -r root/* android_rootfs
+$ cp -r system android_rootfs
+$ ../../../../build/tools/mktarball.sh ../../../host/linux-x86/bin/fs_get_stats android_rootfs . rootfs rootfs.tar.bz2
+7. clean
+
+make TARGET_PRODUCT=beagleboneblack clean
+8. 編譯完成後，相關的編譯過程產物和結果都存放在out目錄中，可以考慮備份該目錄，防止失誤造成需要重新編譯android。
+
+9. 燒寫SDCard
+
+拷貝編譯生成的文件到目錄image_folder
+
+cp external/ti_android_utilities/am335x/u-boot-env/uEnv_beagleboneblack.txt image_folder/uEnv.txt
+
+cp kernel/arch/arm/boot/uImage image_folder
+
+cp u-boot/u-boot.img image_folder
+
+cp u-boot/MLO image_folder
+
+cp out/target/product/beagleboneblack/rootfs.tar.bz2 image_folder
+
+cp -r external/ti_android_utilities/Media_Clips image_folder
+
+cp external/ti_android_utilities/am335x/mk-mmc/mkmmc-android.sh image_folder
+
+cp external/ti_android_utilities/am335x/mk-mmc/README.txt image_folder
+
+插入USB 讀卡器到PC上，用fdisk –l命令查看磁盤信息，發現SDCard設備為/dev/sdb
+
+進入到目錄image_folder中執行下面的命令
+
+sudo ./mkmmc-android.sh /dev/sdbMLO u-boot.img uImage uEnv.txt rootfs.tar.bz2 Media_Clips
+
+
+
+// 掛載到電腦上從BOOT 中刪除MLO 檔案即可從SD 掛載開機
+
+
+使用adb shell 
+
+1 sudo  vim /etc/udev/rules.d/51-android.rules
+ 文件內容:(注意這裡的ID號和上面查詢到的匹配上)
+
+SUBSYSTEM== "usb" , ATTR{idVendor}== "18d1" , ATTR{idProduct}== "d002" , MODE= "0660" , GROUP= "plugdev" , SYMLINK+= "android%n"
+
+2. 保存關閉 拔掉USB電源 再插上電源
+
