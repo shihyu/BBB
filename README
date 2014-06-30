@@ -116,6 +116,7 @@ sudo ./mkmmc-android.sh /dev/sdbMLO u-boot.img uImage uEnv.txt rootfs.tar.bz2 Me
 
 
 // 掛載到電腦上從BOOT 中刪除MLO 檔案即可從SD 掛載開機
+// PS 這版本不需要移除 MLO 就能從SD 掛載開機
 
 
 使用adb shell 
